@@ -1,0 +1,275 @@
+#include "stm32f10x.h"
+#include "UART1.h"
+#include "Delay.h"
+
+char buf[MAX_BUF_SIZE] = {0};
+char buf2[MAX_BUF_SIZE] = {0};
+char *tokenArray[MAX_TOKENS] = {0}; // 存储分割后的字符串数组
+TaskHandle_t task2Handle = NULL;
+TaskHandle_t task1Handle = NULL;
+TaskHandle_t task3Handle = NULL;
+SemaphoreHandle_t xMutex;
+
+/**
+* @brief 手机发送信息给蓝牙，蓝牙发送到stm32,到pc
+ * @param
+ * @param
+ * @retval true:
+   */
+/**
+ * @brief 任务1，从 USART3 接收队列中读取数据，处理包含 '!' 的特定格式数据并进行分割
+ * @param arg 任务创建时传递的参数，此任务未使用该参数
+ * @retval 无
+ */
+void task1(void * arg) {
+    // 打印任务开始信息
+    printf1("task1\r\n");
+    // 用于存储从队列接收到的字符
+    char receivedChar;
+    // buf 数组的索引，用于记录当前存储位置
+    uint16_t bufIndex = 0;
+    // 记录接收到的 '!' 字符的数量
+    uint8_t exclamationCount = 0;
+
+    while (1) {
+        // 从队列接收数据，等待时间为portMAX_DELAY（永久等待）
+        BaseType_t xQueue = xQueueReceive(USART3_RxQueue, &receivedChar, portMAX_DELAY);
+
+        if (xQueue == pdPASS) {
+            // 将接收到的字符存入buf数组
+            if (bufIndex < MAX_BUF_SIZE - 1) {
+                // 将接收到的字符存入 buf 数组
+                buf[bufIndex++] = receivedChar;
+                // 确保字符串以 null 结尾
+                buf[bufIndex] = '\0';
+
+                // 如果收到'!'，可以进行处理
+                if (receivedChar == '!') {
+                    // '!' 字符数量加 1
+                    exclamationCount++;
+
+                    // 当收到两个 '!' 字符时进行处理
+                    if (exclamationCount == 2) {
+                        // 去掉最后的 '!'
+                        buf[bufIndex - 1] = '\0';
+                        // 去掉第一个 '!'
+                        char *processedBuf = buf + 1;
+                        // 打印处理后的字符串
+                        printf1("%s \r\n", processedBuf);
+                        // 用于存储分割后的子字符串
+                        char *token;
+                        // 当前的 token 数量
+                        uint8_t tokenCount = 0;
+                        // 以 '=' 为分隔符分割字符串
+                        token = strtok(processedBuf, "=");
+
+                        if (xMutex != NULL) {
+                            // 获取互斥锁，确保线程安全
+                            if (xSemaphoreTake(xMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+                                // 循环处理每个分割后的字符串
+                                while (token != NULL && tokenCount < MAX_TOKENS) {
+                                    // 存储分割后的字符串
+                                    tokenArray[tokenCount] = token;
+                                    // 打印分割后的字符串
+                                    printf1("[%s]", tokenArray[tokenCount]);
+                                    tokenCount++;
+                                    // 继续分割字符串
+                                    token = strtok(NULL, "=");
+                                }
+
+                                // 释放互斥锁
+                                xSemaphoreGive(xMutex);
+                            } else {
+                                // 打印获取互斥锁失败的信息
+                                printf1("Failed to get mutex\r\n");
+                            }
+                        }
+
+                        // 打印 token 的数量
+                        printf1("\r\ntokenCount = %d\r\n", tokenCount);
+                        // 打印第一个 token
+                     //   printf1("Token 3: %s\r\n", tokenArray[0]);
+
+                        // 如果 token 数量大于 1 且 task2 句柄有效，则通知 task2
+                        if (tokenCount > 1 && task2Handle != NULL) {
+                            // 通知 task2
+                            xTaskNotify(task2Handle, 0x01, eSetBits) ;
+                            // 打印通知信息
+                            printf1("xTaskNotify\r\n");
+                            // vTaskDelay(pdMS_TO_TICKS(100));
+                        }
+
+                        // 打印第一个 token
+                      //  printf1("Token 4: %s\r\n", tokenArray[1]);
+                        // 清空 buf 数组
+                      //  memset(buf, 0, sizeof(buf));
+                        // 重置 buf 数组索引
+                        bufIndex = 0;
+                        // 重置 '!' 字符数量
+                        exclamationCount = 0;
+                    }
+                }
+            }
+        } else  {
+            // 打印从队列接收数据失败的信息
+            printf1("Failed to receive data from queue\n");
+            // 任务延迟 10 毫秒
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+    }
+}
+
+/**
+ * @brief  输入指令到ESP01s
+ * @param
+ * @param
+ * @retval true:
+   */
+/**
+ * @brief 任务2，负责与 ESP01S 模块进行通信，处理蓝牙数据并配置 ESP01S
+ * @param arg 任务创建时传递的参数，此任务未使用该参数
+ * @retval 无
+ */
+void task2(void * arg) {
+    // 打印任务开始信息
+    printf1("task2\r\n");
+    // 向 ESP01S 模块发送 AT 指令，用于测试模块是否正常响应
+    printf2(AT_COMMAND);
+    // 任务延迟 1 秒，等待模块响应
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    // 打印提示信息
+  //  printf1("666\r\n");
+    // 向 ESP01S 模块发送设置工作模式的指令
+    printf2(AT_CWMODE_DEF);
+    // 任务延迟 1 秒，等待模块响应
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    // 定义变量用于存储任务通知值
+    uint32_t ulNotificationValue;
+    // 定义变量用于存储任务通知等待结果
+    BaseType_t xResult;
+    // 打印等待蓝牙数据的提示信息
+    printf1("waiting_for_bluetooth_data...\r\n");
+
+    // 等待任务通知，清除所有通知位并将通知值存储到 ulNotificationValue
+    xResult = xTaskNotifyWait(0x00, 0xFFFFFFFF, &ulNotificationValue, portMAX_DELAY);
+    // 任务延迟 100 毫秒
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    if (xResult == pdTRUE) {
+        // 打印接收到蓝牙数据的提示信息
+        printf1("received_bluetooth_data\r\n");
+        // 任务延迟 100 毫秒
+        vTaskDelay(pdMS_TO_TICKS(100));
+        if (xMutex != NULL) {
+            // 获取互斥锁，确保线程安全
+            if (xSemaphoreTake(xMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+                // 打印第一个分割后的字符串
+               // printf1("Token 0: %s\r\n", tokenArray[0]);
+                // 打印第二个分割后的字符串
+              //  printf1("Token 1: %s\r\n", tokenArray[1]);
+                // 向 ESP01S 模块发送设置网络模式的指令，使用蓝牙数据中的信息
+                printf2("AT+CWJAP_DEF=\"%s\",\"%s\"\r\n", tokenArray[0], tokenArray[1]);
+                // 任务延迟 2 秒，等待模块响应
+                vTaskDelay(pdMS_TO_TICKS(10000));
+            }
+//			vTaskDelay(pdMS_TO_TICKS(5000));
+            // 释放互斥锁
+            xSemaphoreGive(xMutex);
+        } else {
+            // 处理获取互斥锁超时的情况
+            printf1("Failed to take mutex in task2\n");
+        }
+    }
+
+    // 向 ESP01S 模块发送查询 Wi-Fi 的指令
+    printf2(AT_CWJAP_DEF);
+    // 任务延迟 1 秒，等待模块响应
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    // 向 ESP01S 模块发送建立 TCP/UDP 连接的指令
+    printf2(CIPSTART_COMMAND);
+    // 任务延迟 2 秒，等待模块响应
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+    // 向 ESP01S 模块发送打开透传模式的指令
+    printf2(AT_OPEN_CIPSEND);
+    // 任务延迟 100 毫秒
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    // 向 ESP01S 模块发送开始透传发送数据的指令
+    printf2(AT_CIPSEND);
+    // 任务延迟 100 毫秒
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    // 任务进入无限循环，保持任务存活
+    while (1) {
+        // 任务延迟 10 毫秒
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
+/**
+ * @brief  接收ESP01S响应并转发回USART1
+ * @param
+ * @param
+ * @retval true:
+   */
+void task3(void * arg) {
+    printf1("task3\r\n");
+    char receivedChar_task3;
+    uint16_t bufIndex3 = 0;
+
+    while (1) {
+        // 从USART2接收队列读取数据
+        BaseType_t xQueue_task3 = xQueueReceive(USART2_RxQueue, &receivedChar_task3, portMAX_DELAY);
+
+        if (xQueue_task3 == pdPASS) {
+            // 通过USART1发送出去
+            if (bufIndex3 < MAX_BUF_SIZE - 1) {
+                buf2[bufIndex3++] = receivedChar_task3;
+                buf2[bufIndex3] = '\0';
+
+                //printf1("%s", buf2);
+                if (receivedChar_task3 == '\n') {
+                    printf1("%s\r\n", buf2);
+                    memset(buf2, 0, sizeof(buf2));
+                    bufIndex3 = 0;
+                }
+
+            } else {
+                printf1("Failed to receive data from queue3\n");
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
+
+
+        }
+    }
+}
+
+int main(void) {
+    USART1_Init();
+    USART2_Init();
+    USART3_Init();
+
+    NVIC_Init1();
+    NVIC_Init2();
+    NVIC_Init3();
+    printf1("main_Init\r\n");
+    //  printf2("USART2_printf\r\n");
+    xMutex = xSemaphoreCreateMutex();
+
+    if (xMutex == NULL) {
+        // 处理创建互斥锁失败的情况
+        printf1("Failed to create mutex\n");
+    }
+
+    xTaskCreate(task1, "Task1", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, &task1Handle);
+    xTaskCreate(task2, "Task2", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, &task2Handle);
+    xTaskCreate(task3, "Task3", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, &task3Handle);
+    vTaskStartScheduler();
+
+    while (1) {
+    }
+
+}
+
