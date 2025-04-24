@@ -32,6 +32,9 @@
 .\objects\uart1.o: E:\Core\ARM\ARMCC\Bin\..\include\stdio.h
 .\objects\uart1.o: E:\Core\ARM\ARMCC\Bin\..\include\stdarg.h
 .\objects\uart1.o: E:\Core\ARM\ARMCC\Bin\..\include\string.h
+.\objects\uart1.o: E:\Core\ARM\ARMCC\Bin\..\include\time.h
+.\objects\uart1.o: E:\Core\ARM\ARMCC\Bin\..\include\stdlib.h
+.\objects\uart1.o: E:\Core\ARM\ARMCC\Bin\..\include\stdbool.h
 .\objects\uart1.o: .\FreeRTOS\FreeRTOS.h
 .\objects\uart1.o: E:\Core\ARM\ARMCC\Bin\..\include\stddef.h
 .\objects\uart1.o: .\FreeRTOS\FreeRTOSConfig.h

@@ -32,6 +32,9 @@
 .\objects\main.o: E:\Core\ARM\ARMCC\Bin\..\include\stdio.h
 .\objects\main.o: E:\Core\ARM\ARMCC\Bin\..\include\stdarg.h
 .\objects\main.o: E:\Core\ARM\ARMCC\Bin\..\include\string.h
+.\objects\main.o: E:\Core\ARM\ARMCC\Bin\..\include\time.h
+.\objects\main.o: E:\Core\ARM\ARMCC\Bin\..\include\stdlib.h
+.\objects\main.o: E:\Core\ARM\ARMCC\Bin\..\include\stdbool.h
 .\objects\main.o: .\FreeRTOS\FreeRTOS.h
 .\objects\main.o: E:\Core\ARM\ARMCC\Bin\..\include\stddef.h
 .\objects\main.o: .\FreeRTOS\FreeRTOSConfig.h
@@ -45,3 +48,4 @@
 .\objects\main.o: .\FreeRTOS\list.h
 .\objects\main.o: .\FreeRTOS\semphr.h
 .\objects\main.o: .\Utils\Delay.h
+.\objects\main.o: .\Utils\OLED.h
